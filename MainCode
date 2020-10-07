@@ -1,0 +1,89 @@
+module testULTRASONIC(CLK,TRIGGER,ECHO,TENS_DIGIT);
+	 input CLK;
+	(* KEEP = "TRUE" *) output TRIGGER;
+	(* KEEP = "TRUE" *) input ECHO;
+	 output [7:0] TENS_DIGIT;
+	
+	(* KEEP = "TRUE" *)reg [8:0] ECHO_DURATION = 0; //echo pulse duration in us
+	reg [7:0] PP = 0;
+	(* KEEP = "TRUE" *)reg OO = 0; 
+	(* KEEP = "TRUE" *)reg [18:0] COUNT_TRIGGER = 0; //needs to count till 500_000
+	(* KEEP = "TRUE" *)reg [5:0] COUNT_ECHO = 0; //only needs to count till 50	
+	(* KEEP = "TRUE" *)reg RST_COUNT_TRIGGER = 1; //Stop 1 MHz counting and reset all FLAGS
+	(* KEEP = "TRUE" *)reg SUBSTATE_TRIGGER = 1'b0;
+//------------------------------------PARAMETERS----------------------------------------------------	
+	parameter [5:0] DELAY_1us = 50;
+	parameter [8:0] DELAY_10us = 500;
+	parameter [24:0] DELAY_100ms = 12_500_0000;
+//-------------------------------------FLAGS--------------------------------------------------------	
+	reg FLAG_10us = 0; // affected by trigger count
+	reg FLAG_100ms = 0; // affected by trigger count
+
+//------------------------------------SETTING FLAGS-------------------------------------------------------	
+	always@(posedge CLK)begin
+		if(RST_COUNT_TRIGGER)begin
+			COUNT_TRIGGER <= 0;
+			FLAG_10us <= 0;
+			FLAG_100ms <= 0;
+		end	
+		else begin
+			if(COUNT_TRIGGER >= DELAY_10us)FLAG_10us <= 1;
+			if(COUNT_TRIGGER >= DELAY_100ms)FLAG_100ms <= 1;
+			COUNT_TRIGGER <= COUNT_TRIGGER + 1;
+		end	
+	end // end of always		
+//---------------------------------TRIGGER & ECHO ------------------------------------------------
+	always@(posedge CLK) begin
+		case(SUBSTATE_TRIGGER)
+		0: begin
+			if(FLAG_100ms)begin //wait 10ms
+				OO <= 1'b1; //make trigger high
+				SUBSTATE_TRIGGER <= 1;
+				RST_COUNT_TRIGGER <= 1;
+			end
+			else begin 
+				RST_COUNT_TRIGGER <= 0;
+			end				//start/continue counting
+		end
+		1: begin	
+			if(FLAG_10us) begin //wait 10us and put trigger down
+				SUBSTATE_TRIGGER <= SUBSTATE_TRIGGER - 1;
+				OO <= 0; //put trigger down
+				RST_COUNT_TRIGGER <= 1; //stop couting
+			end
+			else begin 
+				RST_COUNT_TRIGGER <= 0;//start/continue
+			end
+		end	
+	endcase	
+	end//end of always					
+
+//--------------------------------ECHO CHECKING------------------------------------------------	
+	always @ (posedge CLK)begin
+		if(ECHO)begin 
+			COUNT_ECHO <= COUNT_ECHO + 1;
+			if(COUNT_ECHO == 48)begin
+				ECHO_DURATION <= ECHO_DURATION + 1;	
+			end
+			if(COUNT_ECHO >= 49) COUNT_ECHO <= 0;
+		end		
+		else if(ECHO_DURATION) begin
+			PP <= ECHO_DURATION;
+			ECHO_DURATION <= 0;
+			COUNT_ECHO <= 0;
+		end		
+	end//end of always
+	assign TENS_DIGIT = PP;
+	assign TRIGGER = OO;
+USER CONSTRAINTS:
+net "TENS_DIGIT[7]" loc = "F9"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TENS_DIGIT[6]" loc = "E9"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TENS_DIGIT[5]" loc = "D11"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TENS_DIGIT[4]" loc = "C11"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TENS_DIGIT[3]" loc = "F11"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TENS_DIGIT[2]" loc = "E11"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TENS_DIGIT[1]" loc = "E12"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TENS_DIGIT[0]" loc = "F12"| IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 8;
+net "TRIGGER" loc = "E8" | IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 6;
+net "ECHO" loc = "F8" | IOSTANDARD = LVTTL| SLEW = SLOW  | DRIVE = 6;
+net "CLK" loc = "C9";
